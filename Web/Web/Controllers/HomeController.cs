@@ -1,13 +1,16 @@
 ﻿using Alipay.AopSdk.Core;
 using Alipay.AopSdk.Core.Domain;
 using Alipay.AopSdk.Core.Request;
+using Alipay.AopSdk.Core.Response;
 using Alipay.AopSdk.Core.Util;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;
+using Web.ViewModel;
 
 namespace Web.Controllers
 {
@@ -80,6 +83,10 @@ namespace Web.Controllers
                     Console.WriteLine($"同步验证失败，订单号：{sArray["out_trade_no"]}");
                     ViewData["PayResult"] = "同步验证失败";
                 }
+
+                AlipayTradeQueryResponseViewModel traceState = GetTraceMsg(sArray["out_trade_no"], sArray["trade_no"]);
+                if (traceState.alipay_trade_query_response.code != "10000")
+                    Console.WriteLine($"获取订单失败，失败原因：{traceState.alipay_trade_query_response.msg}");
             }
             return View();
         }
@@ -124,6 +131,10 @@ namespace Web.Controllers
                 bool flag = AlipaySignature.RSACheckV1(sArray, AlipayPublicKey, CharSet, SignType, false);
                 if (flag)
                 {
+                    AlipayTradeQueryResponseViewModel traceState = GetTraceMsg(sArray["out_trade_no"], sArray["trade_no"]);
+                    if (traceState.alipay_trade_query_response.code != "10000")
+                        Console.WriteLine($"获取订单失败，失败原因：{traceState.alipay_trade_query_response.msg}");
+
                     //交易状态
                     //判断该笔订单是否在商户网站中已经做过处理
                     //如果没有做过处理，根据订单号（out_trade_no）在商户网站的订单系统中查到该笔订单的详细，并执行商户的业务程序
@@ -162,6 +173,27 @@ namespace Web.Controllers
                 sArray.Add(requestItem[i], request.Form[requestItem[i]]);
             }
             return sArray;
+        }
+
+        /// <summary>
+        /// 统一收单线下交易查询接口
+        /// </summary>
+        /// <returns></returns>
+        public AlipayTradeQueryResponseViewModel GetTraceMsg(string out_trade_no, string trade_no)
+        {
+            IAopClient client = new DefaultAopClient(Gatewayurl, AppId, PrivateKey, "json", "1.0", SignType, AlipayPublicKey, CharSet, false);
+
+            Dictionary<string, string> biz = new Dictionary<string, string>();
+            biz.Add("out_trade_no", out_trade_no);
+            biz.Add("trade_no", trade_no);
+
+            AlipayTradeQueryRequest request = new AlipayTradeQueryRequest();
+            request.BizContent = JsonConvert.SerializeObject(biz);
+
+            AlipayTradeQueryResponse response = client.Execute(request);
+
+            return JsonConvert.DeserializeObject<AlipayTradeQueryResponseViewModel>(response.Body);
+
         }
     }
 }
